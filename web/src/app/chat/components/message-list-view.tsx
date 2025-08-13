@@ -108,7 +108,7 @@ export function MessageListView({
         <div className="flex h-8 w-full shrink-0"></div>
       </ul>
       {responding && (noOngoingResearch || !ongoingResearchIsOpen) && (
-        <LoadingAnimation className="ml-4" />
+        <LoadingAnimation className="ml-4 mb-8" />
       )}
     </ScrollContainer>
   );
@@ -188,6 +188,12 @@ function MessageListItem({
         content = message.content ? (
           <div className="w-full px-4">
             <EvaluatorMessage message={message} />
+          </div>
+        ) : null;
+      } else if (message.agent === "reporter") {
+        content = message.content ? (
+          <div className="w-full px-4">
+            <ReporterMessage message={message} />
           </div>
         ) : null;
       } else if (startOfResearch) {
@@ -670,7 +676,6 @@ function EditorTeamMessage({
     try {
       // 尝试解析JSON格式的数据
       const parsedData: unknown = parseJSON(message.content ?? "", null);
-      
       // 如果解析成功且包含title或steps字段，则认为是JSON格式
       if (parsedData && typeof parsedData === 'object' && 
           ((parsedData as { title?: string }).title !== undefined || 
@@ -755,19 +760,30 @@ function EditorTeamMessage({
 
   // 如果是纯文本格式的数据
   return (
-    <MessageBubble message={message}>
-      <div className="flex w-full flex-col text-wrap break-words">
-        <Markdown
-          className={cn(
-            message.role === "user" &&
-              "prose-invert not-dark:text-secondary dark:text-inherit",
-          )}
-          animated={message.isStreaming}
-        >
-          {message.content ?? "暂无内容"}
-        </Markdown>
-      </div>
-    </MessageBubble>
+    <div className="w-full">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+      >
+        <Card className="w-full">
+          <CardContent className="pt-6">
+            <div className="flex w-full flex-col text-wrap break-words">
+              <Markdown
+                className={cn(
+                  "w-full",
+                  message.role === "user" &&
+                    "prose-invert not-dark:text-secondary dark:text-inherit",
+                )}
+                animated={message.isStreaming}
+              >
+                {message.content ?? "暂无内容"}
+              </Markdown>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+    </div>
   );
 }
 
@@ -906,6 +922,42 @@ function EvaluatorMessage({
                   </div>
                 </div>
               ))}
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+    </div>
+  );
+}
+
+// 添加ReporterMessage组件来处理reporter消息类型的Markdown数据
+function ReporterMessage({
+  className,
+  message,
+}: {
+  className?: string;
+  message: Message;
+}) {
+  return (
+    <div className={cn("w-full", className)}>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+      >
+        <Card className="w-full">
+          <CardContent className="pt-6">
+            <div className="flex w-full flex-col text-wrap break-words">
+              <Markdown
+                className={cn(
+                  "w-full",
+                  message.role === "user" &&
+                    "prose-invert not-dark:text-secondary dark:text-inherit",
+                )}
+                animated={message.isStreaming}
+              >
+                {message.content ?? "暂无内容"}
+              </Markdown>
             </div>
           </CardContent>
         </Card>

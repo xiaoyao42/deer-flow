@@ -13,8 +13,12 @@ export function parseJSON<T>(json: string | null | undefined, fallback: T) {
       .replace(/^```plaintext\s*/, "")
       .replace(/^```\s*/, "")
       .replace(/\s*```$/, "");
-    const result = parse(raw);
-    return result as T;
+
+    // 如果raw开头是{，则认为是json
+    if (raw.startsWith("{")) {
+      return parse(raw) as T;
+    }
+    return fallback;
   } catch {
     return fallback;
   }
