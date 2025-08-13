@@ -11,7 +11,7 @@ import {
   Lightbulb,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { LoadingAnimation } from "~/components/deer-flow/loading-animation";
 import { Markdown } from "~/components/deer-flow/markdown";
@@ -145,6 +145,12 @@ function MessageListItem({
       message.agent === "coordinator" ||
       message.agent === "planner" ||
       message.agent === "podcast" ||
+      message.agent === "feedback_handler" ||
+      message.agent === "generate_questions" ||
+      message.agent === "reporter" ||
+      message.agent === "outline" ||
+      message.agent === "editor_team" ||
+      message.agent === "evaluator" ||
       startOfResearch
     ) {
       let content: React.ReactNode;
@@ -166,6 +172,24 @@ function MessageListItem({
             <PodcastCard message={message} />
           </div>
         );
+      } else if (message.agent === "outline") {
+        content = message.content ? (
+          <div className="w-full px-4">
+            <OutlineMessage message={message} />
+          </div>
+        ) : null;
+      } else if (message.agent === "editor_team") {
+        content = message.content ? (
+          <div className="w-full px-4">
+            <EditorTeamMessage message={message} />
+          </div>
+        ) : null;
+      } else if (message.agent === "evaluator") {
+        content = message.content ? (
+          <div className="w-full px-4">
+            <EvaluatorMessage message={message} />
+          </div>
+        ) : null;
       } else if (startOfResearch) {
         content = (
           <div className="w-full px-4">
@@ -626,5 +650,266 @@ function PodcastCard({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function EditorTeamMessage({
+  className,
+  message,
+}: {
+  className?: string;
+  message: Message;
+}) {
+  const editorData = useMemo<{
+    title?: string;
+    thought?: string;
+    steps?: { type?: string; title?: string; description?: string }[];
+    is_research_completed?: boolean;
+    language?: string;
+  } | null>(() => {
+    try {
+      // 尝试解析JSON格式的数据
+      const parsedData: unknown = parseJSON(message.content ?? "", null);
+      
+      // 如果解析成功且包含title或steps字段，则认为是JSON格式
+      if (parsedData && typeof parsedData === 'object' && 
+          ((parsedData as { title?: string }).title !== undefined || 
+           (parsedData as { steps?: unknown[] }).steps !== undefined)) {
+        return parsedData as {
+          title?: string;
+          thought?: string;
+          steps?: { type?: string; title?: string; description?: string }[];
+          is_research_completed?: boolean;
+          language?: string;
+        };
+      }
+      
+      // 否则认为是纯文本格式
+      return null;
+    } catch (e) {
+      // JSON解析出错时，当作纯文本处理
+      console.warn('Failed to parse editor team message:', e);
+      return null;
+    }
+  }, [message.content]);
+
+  // 如果是JSON格式的数据
+  if (editorData) {
+    return (
+      <div className={cn("w-full", className)}>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: "easeOut" }}
+        >
+          <Card className="w-full">
+            <CardHeader>
+              <CardTitle>
+                <Markdown animated={message.isStreaming}>
+                  {`### ${editorData.title ?? "Editor Team Progress"}`}
+                </Markdown>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {editorData.thought && (
+                <div className="mb-4 rounded-lg bg-muted p-4">
+                  <div className="text-muted-foreground italic">
+                    <Markdown animated={message.isStreaming}>
+                      {editorData.thought}
+                    </Markdown>
+                  </div>
+                </div>
+              )}
+              {editorData.steps && (
+                <div className="my-2 flex flex-col gap-4">
+                  {editorData.steps.map((step, i) => (
+                    <div 
+                      key={`step-${i}`} 
+                      className="border-b border-border pb-4 last:border-0"
+                    >
+                      <div className="mb-1 flex items-center gap-2">
+                        <div className="bg-primary/10 text-primary rounded-full px-2 py-1 text-xs font-medium">
+                          {step.type === "info_collecting" ? "信息收集" : step.type ?? "步骤"}
+                        </div>
+                        <h3 className="text-lg font-medium">
+                          <Markdown animated={message.isStreaming}>
+                            {step.title ?? `步骤 ${i + 1}`}
+                          </Markdown>
+                        </h3>
+                      </div>
+                      <div className="text-muted-foreground">
+                        <Markdown animated={message.isStreaming}>
+                          {step.description ?? "暂无描述"}
+                        </Markdown>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // 如果是纯文本格式的数据
+  return (
+    <MessageBubble message={message}>
+      <div className="flex w-full flex-col text-wrap break-words">
+        <Markdown
+          className={cn(
+            message.role === "user" &&
+              "prose-invert not-dark:text-secondary dark:text-inherit",
+          )}
+          animated={message.isStreaming}
+        >
+          {message.content ?? "暂无内容"}
+        </Markdown>
+      </div>
+    </MessageBubble>
+  );
+}
+
+// 添加OutlineMessage组件来处理outline消息类型的JSON数据
+function OutlineMessage({
+  className,
+  message,
+}: {
+  className?: string;
+  message: Message;
+}) {
+  const outline = useMemo<{
+    title?: string;
+    thought?: string;
+    sections?: { title?: string; description?: string }[];
+  }>(() => {
+    return parseJSON(message.content ?? "", {});
+  }, [message.content]);
+  
+  // 当message.isStreaming变为false时，将sections数量存入editTeamCount
+  useEffect(() => {
+    if (!message.isStreaming && outline.sections) {
+      useStore.getState().setEditTeamCount(outline.sections.length);
+    }
+  }, [message.isStreaming, outline.sections]);
+
+  return (
+    <div className={cn("w-full", className)}>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+      >
+        <Card className="w-full">
+          <CardHeader>
+            <CardTitle>
+              <Markdown animated={message.isStreaming}>
+                {`### ${outline.title ?? "Outline"}`}
+              </Markdown>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {outline.thought && (
+              <div className="mb-4 rounded-lg bg-muted p-4">
+                <div className="text-muted-foreground italic">
+                  <Markdown animated={message.isStreaming}>
+                    {outline.thought}
+                  </Markdown>
+                </div>
+              </div>
+            )}
+            {outline.sections && (
+              <div className="my-2 flex flex-col gap-4">
+                {outline.sections.map((section, i) => (
+                  <div key={`section-${i}`} className="border-b border-border pb-4 last:border-0">
+                    <h3 className="mb-2 text-lg font-medium">
+                      <Markdown animated={message.isStreaming}>
+                        {section.title}
+                      </Markdown>
+                    </h3>
+                    <div className="text-muted-foreground">
+                      <Markdown animated={message.isStreaming}>
+                        {section.description}
+                      </Markdown>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
+    </div>
+  );
+}
+
+// 添加EvaluatorMessage组件来处理评估消息类型的数据
+function EvaluatorMessage({
+  className,
+  message,
+}: {
+  className?: string;
+  message: Message;
+}) {
+  const evaluationData = useMemo<{
+    "Relevance"?: string;
+    "Richness of content"?: string;
+    "Readability"?: string;
+    "Compliance"?: string;
+    "Structural Integrity"?: string;
+    "Data Authenticity and Verification"?: string;
+    "Overall Evaluation"?: string;
+  }>(() => {
+    try {
+      return parseJSON(message.content ?? "", {});
+    } catch (e) {
+      return {};
+    }
+  }, [message.content]);
+
+  const evaluationItems = useMemo(() => {
+    return Object.entries(evaluationData).map(([key, value]) => ({
+      criterion: key,
+      evaluation: value,
+    }));
+  }, [evaluationData]);
+
+  return (
+    <div className={cn("w-full", className)}>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+      >
+        <Card className="w-full">
+          <CardHeader>
+            <CardTitle>
+              <Markdown animated={message.isStreaming}>
+                {`### Evaluator Report`}
+              </Markdown>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="my-2 flex flex-col gap-4">
+              {evaluationItems.map((item, i) => (
+                <div key={`evaluation-${i}`} className="border-b border-border pb-4 last:border-0">
+                  <h3 className="mb-2 text-lg font-medium">
+                    <Markdown animated={message.isStreaming}>
+                      {item.criterion}
+                    </Markdown>
+                  </h3>
+                  <div className="text-muted-foreground">
+                    <Markdown animated={message.isStreaming}>
+                      {item.evaluation}
+                    </Markdown>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+    </div>
   );
 }

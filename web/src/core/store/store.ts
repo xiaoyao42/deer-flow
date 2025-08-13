@@ -17,6 +17,7 @@ const THREAD_ID = nanoid();
 
 export const useStore = create<{
   responding: boolean;
+  editTeamCount: number;
   threadId: string | undefined;
   messageIds: string[];
   messages: Map<string, Message>;
@@ -33,6 +34,7 @@ export const useStore = create<{
   openResearch: (researchId: string | null) => void;
   closeResearch: () => void;
   setOngoingResearch: (researchId: string | null) => void;
+  setEditTeamCount: (count: number) => void;
 }>((set) => ({
   responding: false,
   threadId: THREAD_ID,
@@ -44,34 +46,27 @@ export const useStore = create<{
   researchActivityIds: new Map<string, string[]>(),
   ongoingResearchId: null,
   openResearchId: null,
+  editTeamCount: 0,
 
-  appendMessage(message: Message) {
+  appendMessage: (message) =>
     set((state) => ({
       messageIds: [...state.messageIds, message.id],
       messages: new Map(state.messages).set(message.id, message),
-    }));
-  },
-  updateMessage(message: Message) {
+    })),
+  updateMessage: (message) =>
     set((state) => ({
       messages: new Map(state.messages).set(message.id, message),
-    }));
-  },
-  updateMessages(messages: Message[]) {
+    })),
+  updateMessages: (messages) =>
     set((state) => {
       const newMessages = new Map(state.messages);
       messages.forEach((m) => newMessages.set(m.id, m));
       return { messages: newMessages };
-    });
-  },
-  openResearch(researchId: string | null) {
-    set({ openResearchId: researchId });
-  },
-  closeResearch() {
-    set({ openResearchId: null });
-  },
-  setOngoingResearch(researchId: string | null) {
-    set({ ongoingResearchId: researchId });
-  },
+    }),
+  openResearch: (researchId) => set({ openResearchId: researchId }),
+  closeResearch: () => set({ openResearchId: null }),
+  setOngoingResearch: (researchId) => set({ ongoingResearchId: researchId }),
+  setEditTeamCount: (count) => set({ editTeamCount: count }),
 }));
 
 export async function sendMessage(
@@ -96,12 +91,23 @@ export async function sendMessage(
     });
   }
 
+  // 获取所有消息，用于判断是否是第二次请求
+  const allMessages = useStore.getState().messageIds
+    .map(id => useStore.getState().messages.get(id))
+    .filter((message): message is Message => message !== undefined);
+  
+  // 计算用户消息的数量
+  const userMessages = allMessages.filter(message => message.role === "user");
+  
+  // 从第二次用户请求开始，添加interrupt_feedback: "accepted"
+  const shouldAddInterruptFeedback = userMessages.length >= 2 && !interruptFeedback;
+  
   const settings = getChatStreamSettings();
   const stream = chatStream(
     content ?? "[REPLAY]",
     {
       thread_id: THREAD_ID,
-      interrupt_feedback: interruptFeedback,
+      interrupt_feedback: shouldAddInterruptFeedback ? "accepted" : interruptFeedback,
       resources,
       auto_accepted_plan: settings.autoAcceptedPlan,
       enable_deep_thinking: settings.enableDeepThinking ?? false,
@@ -112,11 +118,13 @@ export async function sendMessage(
       max_search_results: settings.maxSearchResults,
       report_style: settings.reportStyle,
       mcp_settings: settings.mcpSettings,
+      feedback_mode: "web", // 添加feedback_mode参数
     },
     options,
   );
 
   setResponding(true);
+  setEditTeamCount(0); // Reset edit team count at start of new message
   let messageId: string | undefined;
   try {
     for await (const event of stream) {
@@ -167,6 +175,10 @@ function setResponding(value: boolean) {
   useStore.setState({ responding: value });
 }
 
+function setEditTeamCount(value: number) {
+  useStore.setState({ editTeamCount: value });
+}
+
 function existsMessage(id: string) {
   return useStore.getState().messageIds.includes(id);
 }
@@ -189,7 +201,7 @@ function findMessageByToolCallId(toolCallId: string) {
 function appendMessage(message: Message) {
   if (
     message.agent === "coder" ||
-    message.agent === "reporter" ||
+    // message.agent === "reporter" ||
     message.agent === "researcher"
   ) {
     if (!getOngoingResearchId()) {
