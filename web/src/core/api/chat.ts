@@ -61,7 +61,7 @@ export async function* chatStream(
       } as ChatEvent;
     }
   }catch(e){
-    console.error(e);
+    console.warn(e);
   }
 }
 
@@ -139,7 +139,7 @@ async function* chatReplayStream(
         }
       }
     } catch (e) {
-      console.error(e);
+      console.warn(e);
     }
   }
 }

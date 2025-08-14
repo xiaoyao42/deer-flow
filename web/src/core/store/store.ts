@@ -27,6 +27,7 @@ export const useStore = create<{
   researchActivityIds: Map<string, string[]>;
   ongoingResearchId: string | null;
   openResearchId: string | null;
+  lastEventType?: string;
 
   appendMessage: (message: Message) => void;
   updateMessage: (message: Message) => void;
@@ -35,6 +36,7 @@ export const useStore = create<{
   closeResearch: () => void;
   setOngoingResearch: (researchId: string | null) => void;
   setEditTeamCount: (count: number) => void;
+  setLastEventType: (type: string | undefined) => void;
 }>((set) => ({
   responding: false,
   threadId: THREAD_ID,
@@ -47,6 +49,7 @@ export const useStore = create<{
   ongoingResearchId: null,
   openResearchId: null,
   editTeamCount: 0,
+  lastEventType: undefined,
 
   appendMessage: (message) =>
     set((state) => ({
@@ -67,6 +70,7 @@ export const useStore = create<{
   closeResearch: () => set({ openResearchId: null }),
   setOngoingResearch: (researchId) => set({ ongoingResearchId: researchId }),
   setEditTeamCount: (count) => set({ editTeamCount: count }),
+  setLastEventType: (type) => set({ lastEventType: type }),
 }));
 
 export async function sendMessage(
@@ -96,18 +100,21 @@ export async function sendMessage(
     .map(id => useStore.getState().messages.get(id))
     .filter((message): message is Message => message !== undefined);
   
-  // 计算用户消息的数量
-  const userMessages = allMessages.filter(message => message.role === "user");
-  
-  // 从第二次用户请求开始，添加interrupt_feedback: "accepted"
-  const shouldAddInterruptFeedback = userMessages.length >= 2 && !interruptFeedback;
+  // 如果没有显式提供interruptFeedback，则检查上一次事件类型是否是interrupt
+  let finalInterruptFeedback = interruptFeedback;
+  if (!interruptFeedback) {
+    const lastEventType = useStore.getState().lastEventType;
+    if (lastEventType === "interrupt") {
+      finalInterruptFeedback = "accepted";
+    }
+  }
   
   const settings = getChatStreamSettings();
   const stream = chatStream(
     content ?? "[REPLAY]",
     {
       thread_id: THREAD_ID,
-      interrupt_feedback: shouldAddInterruptFeedback ? "accepted" : interruptFeedback,
+      interrupt_feedback: finalInterruptFeedback,
       resources,
       auto_accepted_plan: settings.autoAcceptedPlan,
       enable_deep_thinking: settings.enableDeepThinking ?? false,
@@ -126,10 +133,12 @@ export async function sendMessage(
   setResponding(true);
   setEditTeamCount(0); // Reset edit team count at start of new message
   let messageId: string | undefined;
+  let lastEventType: string | undefined;
   try {
     for await (const event of stream) {
       const { type, data } = event;
       messageId = data.id;
+      lastEventType = type; // 保存最后一个事件类型
       let message: Message | undefined;
       if (type === "tool_call_result") {
         message = findMessageByToolCallId(data.tool_call_id);
@@ -144,7 +153,7 @@ export async function sendMessage(
           reasoningContent: "",
           reasoningContentChunks: [],
           isStreaming: true,
-          interruptFeedback,
+          interruptFeedback: finalInterruptFeedback,
         };
         appendMessage(message);
       }
@@ -167,6 +176,8 @@ export async function sendMessage(
     }
     useStore.getState().setOngoingResearch(null);
   } finally {
+    // 在finally块中更新lastEventType
+    useStore.getState().setLastEventType(lastEventType);
     setResponding(false);
   }
 }

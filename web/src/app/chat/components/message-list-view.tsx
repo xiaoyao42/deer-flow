@@ -902,7 +902,7 @@ function EvaluatorMessage({
           <CardHeader>
             <CardTitle>
               <Markdown animated={message.isStreaming}>
-                {`### Evaluator Report`}
+                {`### 评估报告`}
               </Markdown>
             </CardTitle>
           </CardHeader>
