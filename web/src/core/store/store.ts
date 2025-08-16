@@ -11,13 +11,11 @@ import type { Message, Resource } from "../messages";
 import { mergeMessage } from "../messages";
 import { parseJSON } from "../utils";
 
-import { getChatStreamSettings } from "./settings-store";
-
-const THREAD_ID = nanoid();
+import { getChatStreamSettings } from "./settings-store";;
 
 export const useStore = create<{
   responding: boolean;
-  threadId: string | undefined;
+  threadId: string;
   messageIds: string[];
   messages: Map<string, Message>;
   researchIds: string[];
@@ -26,6 +24,7 @@ export const useStore = create<{
   researchActivityIds: Map<string, string[]>;
   ongoingResearchId: string | null;
   openResearchId: string | null;
+  lastEventType: string | undefined;
 
   appendMessage: (message: Message) => void;
   updateMessage: (message: Message) => void;
@@ -33,9 +32,11 @@ export const useStore = create<{
   openResearch: (researchId: string | null) => void;
   closeResearch: () => void;
   setOngoingResearch: (researchId: string | null) => void;
+  setLastEventType: (eventType: string | undefined) => void;
+  resetThreadId: () => void;
 }>((set) => ({
   responding: false,
-  threadId: THREAD_ID,
+  threadId: nanoid(),
   messageIds: [],
   messages: new Map<string, Message>(),
   researchIds: [],
@@ -44,6 +45,7 @@ export const useStore = create<{
   researchActivityIds: new Map<string, string[]>(),
   ongoingResearchId: null,
   openResearchId: null,
+  lastEventType: undefined,
 
   appendMessage(message: Message) {
     set((state) => ({
@@ -72,6 +74,22 @@ export const useStore = create<{
   setOngoingResearch(researchId: string | null) {
     set({ ongoingResearchId: researchId });
   },
+  setLastEventType(eventType: string | undefined) {
+    set({ lastEventType: eventType });
+  },
+  resetThreadId: () =>
+    set({
+      threadId: nanoid(),
+      // 如果要新建页面，则重置更多参数
+      // messageIds: [],
+      // messages: new Map<string, Message>(),
+      // researchIds: [],
+      // researchPlanIds: new Map<string, string>(),
+      // researchReportIds: new Map<string, string>(),
+      // researchActivityIds: new Map<string, string[]>(),
+      // ongoingResearchId: null,
+      // openResearchId: null,
+    }),
 }));
 
 export async function sendMessage(
@@ -85,22 +103,28 @@ export async function sendMessage(
   } = {},
   options: { abortSignal?: AbortSignal } = {},
 ) {
+  const threadId = useStore.getState().threadId;
   if (content != null) {
     appendMessage({
       id: nanoid(),
-      threadId: THREAD_ID,
+      threadId: threadId,
       role: "user",
       content: content,
       contentChunks: [content],
       resources,
     });
   }
+  // 如果没有显示提供的interruptFeedback，如果最后的事件类型是interrupt，使用最后一个事件类型
+  const lastEventType = useStore.getState().lastEventType;
+  if (!interruptFeedback && lastEventType === "interrupt") {
+    interruptFeedback = "accepted";
+  }
 
   const settings = getChatStreamSettings();
   const stream = chatStream(
     content ?? "[REPLAY]",
     {
-      thread_id: THREAD_ID,
+      thread_id: threadId,
       interrupt_feedback: interruptFeedback,
       resources,
       auto_accepted_plan: settings.autoAcceptedPlan,
@@ -112,16 +136,19 @@ export async function sendMessage(
       max_search_results: settings.maxSearchResults,
       report_style: settings.reportStyle,
       mcp_settings: settings.mcpSettings,
+      feedback_mode: settings.feedbackMode,
     },
     options,
   );
 
   setResponding(true);
   let messageId: string | undefined;
+  let currentEventType: string | undefined;
   try {
     for await (const event of stream) {
       const { type, data } = event;
       messageId = data.id;
+      currentEventType = type;
       let message: Message | undefined;
       if (type === "tool_call_result") {
         message = findMessageByToolCallId(data.tool_call_id);
@@ -159,6 +186,8 @@ export async function sendMessage(
     }
     useStore.getState().setOngoingResearch(null);
   } finally {
+    // 更新lastEventType
+    useStore.getState().setLastEventType(currentEventType);
     setResponding(false);
   }
 }
@@ -190,7 +219,8 @@ function appendMessage(message: Message) {
   if (
     message.agent === "coder" ||
     message.agent === "reporter" ||
-    message.agent === "researcher"
+    message.agent === "researcher" ||
+    message.agent === "editor_team"
   ) {
     if (!getOngoingResearchId()) {
       const id = message.id;
@@ -204,11 +234,12 @@ function appendMessage(message: Message) {
 
 function updateMessage(message: Message) {
   if (
-    getOngoingResearchId() &&
-    message.agent === "reporter" &&
+    message.agent === "evaluator" &&
+    message.finishReason === "stop" &&
     !message.isStreaming
   ) {
     useStore.getState().setOngoingResearch(null);
+    useStore.getState().resetThreadId();
   }
   useStore.getState().updateMessage(message);
 }
@@ -222,7 +253,11 @@ function appendResearch(researchId: string) {
   const reversedMessageIds = [...useStore.getState().messageIds].reverse();
   for (const messageId of reversedMessageIds) {
     const message = getMessage(messageId);
-    if (message?.agent === "planner") {
+    // if (message?.agent === "planner") {
+    //   planMessage = message;
+    //   break;
+    // }
+    if (message?.agent === "outline") {
       planMessage = message;
       break;
     }
@@ -276,6 +311,7 @@ export function closeResearch() {
 }
 
 export async function listenToPodcast(researchId: string) {
+  const threadId = useStore.getState().threadId;
   const planMessageId = useStore.getState().researchPlanIds.get(researchId);
   const reportMessageId = useStore.getState().researchReportIds.get(researchId);
   if (planMessageId && reportMessageId) {
@@ -285,7 +321,7 @@ export async function listenToPodcast(researchId: string) {
     if (reportMessage?.content) {
       appendMessage({
         id: nanoid(),
-        threadId: THREAD_ID,
+        threadId: threadId,
         role: "user",
         content: "Please generate a podcast for the above research.",
         contentChunks: [],
@@ -294,7 +330,7 @@ export async function listenToPodcast(researchId: string) {
       const podcastObject = { title, researchId };
       const podcastMessage: Message = {
         id: podCastMessageId,
-        threadId: THREAD_ID,
+        threadId: threadId,
         role: "assistant",
         agent: "podcast",
         content: JSON.stringify(podcastObject),

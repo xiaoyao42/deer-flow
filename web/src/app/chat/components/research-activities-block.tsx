@@ -48,32 +48,119 @@ export function ResearchActivitiesBlock({
         {activityIds.map(
           (activityId, i) =>
             i !== 0 && (
-              <motion.li
+              <ActivityRenderer
                 key={activityId}
-                style={{ transition: "all 0.4s ease-out" }}
-                initial={{ opacity: 0, y: 24 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{
-                  duration: 0.4,
-                  ease: "easeOut",
-                }}
-              >
-                <ActivityMessage messageId={activityId} />
-                <ActivityListItem messageId={activityId} />
-                {i !== activityIds.length - 1 && <hr className="my-8" />}
-              </motion.li>
+                activityId={activityId}
+                isLast={i === activityIds.length - 1}
+              />
             ),
         )}
       </ul>
-      {ongoing && <LoadingAnimation className="mx-4 my-12" />}
+      {ongoing && <LoadingAnimation className="mx-4 my-4" />}
     </>
   );
+}
+
+function ActivityRenderer({
+  activityId,
+  isLast,
+}: {
+  activityId: string;
+  isLast: boolean;
+}) {
+  const message = useMessage(activityId);
+
+  // const hasVisibleMessage =
+  //   message?.agent &&
+  //   message.content &&
+  //   message.agent !== "reporter" &&
+  //   message.agent !== "planner";
+
+  // const hasVisibleToolCalls =
+  //   message && !message.isStreaming && (message.toolCalls?.length ?? 0) > 0;
+
+  // if (!message || (!hasVisibleMessage && !hasVisibleToolCalls)) {
+  if (!message?.content) {
+    return null;
+  }
+
+  return (
+    <motion.li
+      style={{ transition: "all 0.4s ease-out" }}
+      initial={{ opacity: 0, y: 24 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        duration: 0.4,
+        ease: "easeOut",
+      }}
+    >
+      <ActivityMessage messageId={activityId} />
+      <ActivityListItem messageId={activityId} />
+      {!isLast && <hr className="my-4" />}
+    </motion.li>
+  );
+}
+
+// 定义研究步骤的接口
+interface ResearchStep {
+  type: string;
+  title: string;
+  description: string;
+}
+
+// 定义研究数据的接口
+interface ResearchData {
+  language?: string;
+  is_research_completed?: boolean;
+  title?: string;
+  thought?: string;
+  steps?: ResearchStep[];
 }
 
 function ActivityMessage({ messageId }: { messageId: string }) {
   const message = useMessage(messageId);
   if (message?.agent && message.content) {
     if (message.agent !== "reporter" && message.agent !== "planner") {
+      const parsedData = parseJSON(
+        message.content ?? "",
+        null,
+      ) as ResearchData | null;
+      if (parsedData && typeof parsedData === "object") {
+        return (
+          <div className="bg-card rounded-xl px-4 py-4">
+            {/* {parsedData.title && (
+              <h3 className="mb-2 font-semibold">{parsedData.title}</h3>
+            )} */}
+
+            <div className="border-muted border-l-[2px] pl-4">
+              {parsedData.thought && (
+                <div className="mb-4">
+                  <div className="opacity-80">{parsedData.thought}</div>
+                </div>
+              )}
+
+              {parsedData.steps && parsedData.steps.length > 0 && (
+                <div className="space-y-3">
+                  {parsedData.steps.map((step: ResearchStep, index: number) => (
+                    <div key={`step-${index}`}>
+                      <div className="mb-1 flex items-center gap-2">
+                        <span className="text-primary font-medium">
+                          {index + 1}.
+                        </span>
+                        <span className="text-primary font-semibold">
+                          {step.title}
+                        </span>
+                      </div>
+                      <div className="pl-6 opacity-80">{step.description}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      }
+      // 普通消息
       return (
         <div className="px-4 py-2">
           <Markdown animated checkLinkCredibility>
@@ -90,6 +177,7 @@ function ActivityListItem({ messageId }: { messageId: string }) {
   const message = useMessage(messageId);
   if (message) {
     if (!message.isStreaming && message.toolCalls?.length) {
+      console.log(message.toolCalls);
       for (const toolCall of message.toolCalls) {
         if (toolCall.name === "web_search") {
           return <WebSearchToolCall key={toolCall.id} toolCall={toolCall} />;

@@ -3,7 +3,6 @@
 
 "use client";
 
-import Mention from "@tiptap/extension-mention";
 import { Editor, Extension, type Content } from "@tiptap/react";
 import {
   EditorContent,
@@ -18,7 +17,6 @@ import { useDebouncedCallback } from "use-debounce";
 import { useTranslations } from "next-intl";
 
 import "~/styles/prosemirror.css";
-import { resourceSuggestion } from "./resource-suggestion";
 import React, { forwardRef, useEffect, useMemo, useRef } from "react";
 import type { Resource } from "~/core/messages";
 import { useConfig } from "~/core/api/hooks";
@@ -138,7 +136,9 @@ const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         }),
         Placeholder.configure({
           showOnlyCurrent: false,
-          placeholder: config?.rag.provider ? t("placeholderWithRag") : t("placeholder"),
+          placeholder: config?.rag.provider
+            ? t("placeholderWithRag")
+            : t("placeholder"),
           emptyEditorClass: "placeholder",
         }),
         Extension.create({
@@ -158,16 +158,16 @@ const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
           },
         }),
       ];
-      if (config?.rag.provider) {
-        extensions.push(
-          Mention.configure({
-            HTMLAttributes: {
-              class: "mention",
-            },
-            suggestion: resourceSuggestion,
-          }) as Extension,
-        );
-      }
+      // if (config?.rag.provider) {
+      //   extensions.push(
+      //     Mention.configure({
+      //       HTMLAttributes: {
+      //         class: "mention",
+      //       },
+      //       suggestion: resourceSuggestion,
+      //     }) as Extension,
+      //   );
+      // }
       return extensions;
     }, [config]);
 

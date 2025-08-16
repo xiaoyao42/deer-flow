@@ -16,6 +16,7 @@ const DEFAULT_SETTINGS: SettingsState = {
     maxStepNum: 3,
     maxSearchResults: 3,
     reportStyle: "academic",
+    feedbackMode: "web",
   },
   mcp: {
     servers: [],
@@ -31,6 +32,7 @@ export type SettingsState = {
     maxStepNum: number;
     maxSearchResults: number;
     reportStyle: "academic" | "popular_science" | "news" | "social_media";
+    feedbackMode: "web";
   };
   mcp: {
     servers: MCPServerMetadata[];

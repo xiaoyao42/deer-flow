@@ -3,7 +3,7 @@
 
 import { MagicWandIcon } from "@radix-ui/react-icons";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowUp, Lightbulb, X } from "lucide-react";
+import { ArrowUp, Lightbulb, Plus, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useMemo, useRef, useState } from "react";
 
@@ -22,6 +22,7 @@ import {
   setEnableDeepThinking,
   setEnableBackgroundInvestigation,
   useSettingsStore,
+  useStore,
 } from "~/core/store";
 import { cn } from "~/lib/utils";
 
@@ -49,6 +50,7 @@ export function InputBox({
 }) {
   const t = useTranslations("chat.inputBox");
   const tCommon = useTranslations("common");
+  const resetThreadId = useStore((state) => state.resetThreadId);
   const enableDeepThinking = useSettingsStore(
     (state) => state.general.enableDeepThinking,
   );
@@ -247,7 +249,7 @@ export function InputBox({
             </Tooltip>
           )}
 
-          <Tooltip
+          {/* <Tooltip
             className="max-w-60"
             title={
               <div>
@@ -272,11 +274,22 @@ export function InputBox({
             >
               <Detective /> {t("investigation")}
             </Button>
-          </Tooltip>
-          <ReportStyleDialog />
+          </Tooltip> */}
+          {/* <ReportStyleDialog /> */}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Tooltip title={t("enhancePrompt")}>
+          {/* <Tooltip title={tCommon("newChat")}>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-10 w-10 rounded-full"
+              onClick={resetThreadId}
+              disabled={responding}
+            >
+              <Plus />
+            </Button>
+          </Tooltip> */}
+          {/* <Tooltip title={t("enhancePrompt")}>
             <Button
               variant="ghost"
               size="icon"
@@ -295,7 +308,7 @@ export function InputBox({
                 <MagicWandIcon className="text-brand" />
               )}
             </Button>
-          </Tooltip>
+          </Tooltip> */}
           <Tooltip title={responding ? tCommon("stop") : tCommon("send")}>
             <Button
               variant="outline"

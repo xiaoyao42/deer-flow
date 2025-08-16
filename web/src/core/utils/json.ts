@@ -13,7 +13,11 @@ export function parseJSON<T>(json: string | null | undefined, fallback: T) {
       .replace(/^```plaintext\s*/, "")
       .replace(/^```\s*/, "")
       .replace(/\s*```$/, "");
-    return parse(raw) as T;
+    // 如果row开头是{，则认为是json
+    if (raw.startsWith("{")) {
+      return parse(raw) as T;
+    }
+    return fallback;
   } catch {
     return fallback;
   }

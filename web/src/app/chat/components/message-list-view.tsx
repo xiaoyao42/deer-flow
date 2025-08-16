@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronRight,
   Lightbulb,
+  CheckCircle,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import React, { useCallback, useMemo, useRef, useState } from "react";
@@ -108,7 +109,7 @@ export function MessageListView({
         <div className="flex h-8 w-full shrink-0"></div>
       </ul>
       {responding && (noOngoingResearch || !ongoingResearchIsOpen) && (
-        <LoadingAnimation className="ml-4" />
+        <LoadingAnimation className="mb-8 ml-4" />
       )}
     </ScrollContainer>
   );
@@ -145,6 +146,9 @@ function MessageListItem({
       message.agent === "coordinator" ||
       message.agent === "planner" ||
       message.agent === "podcast" ||
+      message.agent === "generate_questions" ||
+      message.agent === "outline" ||
+      message.agent === "evaluator" ||
       startOfResearch
     ) {
       let content: React.ReactNode;
@@ -164,6 +168,18 @@ function MessageListItem({
         content = (
           <div className="w-full px-4">
             <PodcastCard message={message} />
+          </div>
+        );
+      } else if (message.agent === "outline") {
+        content = (
+          <div className="w-full px-4">
+            <OutlineCard message={message} />
+          </div>
+        );
+      } else if (message.agent === "evaluator") {
+        content = (
+          <div className="w-full px-4">
+            <EvaluatorCard message={message} />
           </div>
         );
       } else if (startOfResearch) {
@@ -549,6 +565,146 @@ function PlanCard({
         </motion.div>
       )}
     </div>
+  );
+}
+
+function OutlineCard({
+  className,
+  message,
+}: {
+  className?: string;
+  message: Message;
+}) {
+  const t = useTranslations("chat.research");
+  const data = useMemo(() => {
+    return parseJSON(
+      message.content ?? "",
+      {} as {
+        language: string;
+        thought: string;
+        title: string;
+        sections: { title: string; description: string }[];
+      },
+    );
+  }, [message.content]);
+
+  return (
+    <Card className={cn("w-full", className)}>
+      <CardHeader className="pb-2">
+        <CardTitle>
+          <Markdown animated={message.isStreaming}>{`### ${
+            data.title !== undefined && data.title !== ""
+              ? data.title
+              : t("deepResearch")
+          }`}</Markdown>
+        </CardTitle>
+      </CardHeader>
+      <div className="bg-card rounded-xl px-8">
+        <Markdown className="opacity-80" animated={message.isStreaming}>
+          {data.thought}
+        </Markdown>
+      </div>
+      <CardContent>
+        {data.sections && (
+          <ul className="my-2 flex list-decimal flex-col gap-4 border-l-[2px] pl-8">
+            {data.sections.map((section, i) => (
+              <li key={`section-${i}`}>
+                <h3 className="mb text-lg font-medium">
+                  <Markdown animated={message.isStreaming}>
+                    {section.title}
+                  </Markdown>
+                </h3>
+                <div className="text-muted-foreground text-sm">
+                  <Markdown
+                    className="opacity-80"
+                    animated={message.isStreaming}
+                  >
+                    {section.description}
+                  </Markdown>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function EvaluatorCard({
+  className,
+  message,
+}: {
+  className?: string;
+  message: Message;
+}) {
+  const t = useTranslations("evaluation");
+  const data = useMemo<Record<string, string>>(() => {
+    return parseJSON(message.content ?? "", {});
+  }, [message.content]);
+
+  // Map of English keys to translation keys
+  const keyMap: Record<string, string> = {
+    "Overall Evaluation": "overallEvaluation",
+    Relevance: "relevance",
+    "Richness of content": "richnessOfContent",
+    Readability: "readability",
+    Compliance: "compliance",
+    "Structural Integrity": "structuralIntegrity",
+    "Information Reliability": "informationReliability",
+    "Accuracy of Data": "accuracyOfData",
+    "Depth of Analysis": "depthOfAnalysis",
+  };
+
+  const overallEvaluation = data["Overall Evaluation"];
+  const evaluationPairs = Object.entries(data).filter(
+    ([key, value]) => value && key !== "Overall Evaluation",
+  );
+
+  return (
+    <Collapsible className={cn("w-full", className)}>
+      <CollapsibleTrigger asChild>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              {message.isStreaming ? (
+                <LoadingAnimation className="scale-75" />
+              ) : (
+                <CheckCircle size={18} />
+              )}
+              <span>{t("title")}</span>
+              <ChevronDown className="ml-auto h-4 w-4 shrink-0 transition-transform duration-200" />
+            </CardTitle>
+          </CardHeader>
+        </Card>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="bg-secondary/50 mt-2 space-y-4 rounded-lg border p-4">
+          {overallEvaluation && (
+            <div>
+              <h3 className="mb-2 font-semibold">{t("overallEvaluation")}</h3>
+              <p className="text-muted-foreground text-sm">
+                {overallEvaluation}
+              </p>
+            </div>
+          )}
+          {evaluationPairs.length > 0 && (
+            <div className="space-y-4">
+              {evaluationPairs.map(([key, value]) => (
+                <div key={key}>
+                  <h3 className="mb-2 font-semibold">
+                    {keyMap[key] ? t(keyMap[key]) : key}
+                  </h3>
+                  <div className="text-muted-foreground text-sm">
+                    <Markdown animated={message.isStreaming}>{value}</Markdown>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
